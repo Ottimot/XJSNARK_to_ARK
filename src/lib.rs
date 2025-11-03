@@ -160,30 +160,29 @@ impl <F:PrimeField> Parser<F>{
 
         if self.flag{
             let reader_input = Self::open_reader(&self.path_input).map_err(|e| {
-                eprintln!("FILE INPUT INESISTENTE");
+                eprintln!("Input file not found");
                 SynthesisError::Unsatisfiable
             })?;
             let mut lines_input = reader_input.lines().enumerate();
             for (i,line_t) in lines_input.by_ref(){
 
-                let line = line_t.map_err(|e| { eprintln!("ERRORE LETTURA RIGA {}", i); SynthesisError::Unsatisfiable })?;
+                let line = line_t.map_err(|e| { eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
                 let line = line.splitn(2, '#').next().unwrap().trim_end();
                 let line = line.trim();
 
                 if!(line.starts_with("#") || line.is_empty()){
 
                     let mut line = line.split_whitespace();
-                    let wire_str = line.next().ok_or_else(|| {eprintln!("ERRORE LETTURA RIGA {}", i); SynthesisError::Unsatisfiable })?;
+                    let wire_str = line.next().ok_or_else(|| {eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
                     let wire_id: Wire = wire_str
                     .parse()
                     .map_err(|_| ark_relations::r1cs::SynthesisError::Unsatisfiable)?;
 
-                    let value_str = line.next().ok_or_else(|| {eprintln!("ERRORE LETTURA RIGA {}", i); SynthesisError::Unsatisfiable })?;
+                    let value_str = line.next().ok_or_else(|| {eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
 
                     let value = BigUint::parse_bytes(value_str.trim().as_bytes(),16)
-                        .ok_or_else(|| {eprintln!("Formato HEX errato"); SynthesisError::Unsatisfiable})?;
-                
-                    
+                        .ok_or_else(|| {eprintln!("Invalid HEX format"); SynthesisError::Unsatisfiable})?;
+
                     let field_value = F::from_be_bytes_mod_order(&value.to_bytes_be());
                     self.wireValues.insert(wire_id, field_value);
                     
@@ -192,14 +191,14 @@ impl <F:PrimeField> Parser<F>{
         }
 
         let reader = Self::open_reader(&self.path).map_err(|e| {
-            eprintln!("FILE INESISTENTE");
+            eprintln!("File not found");
             SynthesisError::Unsatisfiable
         })?;
         let lines = reader.lines().enumerate();
 
         for (i,line_t) in lines{
 
-            let line = line_t.map_err(|e| { eprintln!("ERRORE LETTURA RIGA"); SynthesisError::Unsatisfiable })?;
+            let line = line_t.map_err(|e| { eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
             let line = line.splitn(2, '#').next().unwrap().trim_end();
             let line = line.trim();
 
@@ -209,40 +208,30 @@ impl <F:PrimeField> Parser<F>{
 
             else if i == 0{
                 if let Some(line_i) = line.strip_prefix("total ") {
-                    self.numWires = line_i.trim().parse::<usize>().map_err(|e| { eprintln!("ERRORE LETTURA RIGA"); SynthesisError::Unsatisfiable })?;
+                    self.numWires = line_i.trim().parse::<usize>().map_err(|e| { eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
                 }
                 else {
-                    eprintln!("FILE NON CONFORME -> PRIMA RIGA NO TOTAL");
+                    eprintln!("File not conforming -> First line without total count");
                     return Err(SynthesisError::Unsatisfiable);
                 } 
                 
             }
-            /*  
-            
-            else if i == 1{
-
-                self.numInputs += 1;
-                let w: Wire = 0;
-                self.inputWireIds.push(w);
-
-            }
-            */
 
            else if let Some(line_i) = line.strip_prefix("input ") {
                 self.numInputs += 1;
-                let w: Wire = line_i.trim().parse().map_err(|e| { eprintln!("ERRORE LETTURA RIGA INPUT: {}", line_i); SynthesisError::Unsatisfiable })?;
+                let w: Wire = line_i.trim().parse().map_err(|e| { eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
                 self.inputWireIds.push(w);
             }
 
             else if let Some(line_i) = line.strip_prefix("nizkinput ") {
                 self.numNizkInputs += 1;
-                let w: Wire = line_i.trim().parse().map_err(|e| { eprintln!("ERRORE LETTURA RIGA WITNESS: {}", line_i); SynthesisError::Unsatisfiable })?; 
+                let w: Wire = line_i.trim().parse().map_err(|e| { eprintln!("Error reading line {} ", i); SynthesisError::Unsatisfiable })?;
                 self.nizkWireIds.push(w);
             }
 
             else if let Some(line_i) = line.strip_prefix("output ") {
                 self.numOutputs += 1;
-                let w: Wire = line_i.trim().parse().map_err(|e| { eprintln!("ERRORE LETTURA RIGA OUTPUT"); SynthesisError::Unsatisfiable })?;
+                let w: Wire = line_i.trim().parse().map_err(|e| { eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
                 self.outputWireIds.push(w);
                 let c: &mut usize = self.wireUseCounters.entry(w).or_default();
                 *c += 1; 
@@ -250,8 +239,8 @@ impl <F:PrimeField> Parser<F>{
             
             else {
 
-                let (op, after_op) = line.split_once(" in ").ok_or_else(|| { eprintln!("MANCA *IN* PER OPERAZIONE, linea {}", i); SynthesisError::Unsatisfiable })?;
-                let (in_blk, after_inputs) = after_op.split_once(" out ").ok_or_else(|| { eprintln!("MANCA *OUT* PER OPERAZIONE, linea {}", i); SynthesisError::Unsatisfiable })?;
+                let (op, after_op) = line.split_once(" in ").ok_or_else(|| { eprintln!("Missing *IN* for operation, line {}", i); SynthesisError::Unsatisfiable })?;
+                let (in_blk, after_inputs) = after_op.split_once(" out ").ok_or_else(|| { eprintln!("Missing *OUT* for operation, line {}", i); SynthesisError::Unsatisfiable })?;
                     
                 let input_str = in_blk
                     .split_once('<')
@@ -290,7 +279,7 @@ impl <F:PrimeField> Parser<F>{
                         
                         let mut value: F = F::zero();
                         for &w in &input_ids {
-                            let v = self.wireValues.get(&w).ok_or_else(|| {eprintln!("Manca valore per wire {}", w); SynthesisError::Unsatisfiable})?;
+                            let v = self.wireValues.get(&w).ok_or_else(|| {eprintln!("Missing value for wire {}", w); SynthesisError::Unsatisfiable})?;
                             value += *v;
                         }
                         self.wireValues.insert(output_ids[0], value);
@@ -300,8 +289,8 @@ impl <F:PrimeField> Parser<F>{
                         let input_2 = input_ids[1];
                         let output = output_ids[0];
 
-                        let v1 = self.wireValues.get(&input_1).ok_or_else(|| {eprintln!("Manca valore per wire {}", input_1); SynthesisError::Unsatisfiable})?;
-                        let v2 = self.wireValues.get(&input_2).ok_or_else(|| {eprintln!("Manca valore per wire {}", input_2); SynthesisError::Unsatisfiable})?;
+                        let v1 = self.wireValues.get(&input_1).ok_or_else(|| {eprintln!("Missing value for wire {}", input_1); SynthesisError::Unsatisfiable})?;
+                        let v2 = self.wireValues.get(&input_2).ok_or_else(|| {eprintln!("Missing value for wire {}", input_2); SynthesisError::Unsatisfiable})?;
                         let value = *v1 * *v2;
                         self.wireValues.insert(output, value);
                     }
@@ -310,8 +299,8 @@ impl <F:PrimeField> Parser<F>{
                         let input_2 = input_ids[1];
                         let output = output_ids[0];
 
-                        let v1 = self.wireValues.get(&input_1).ok_or_else(|| {eprintln!("Manca valore per wire {}", input_1); SynthesisError::Unsatisfiable})?;
-                        let v2 = self.wireValues.get(&input_2).ok_or_else(|| {eprintln!("Manca valore per wire {}", input_2); SynthesisError::Unsatisfiable})?;
+                        let v1 = self.wireValues.get(&input_1).ok_or_else(|| {eprintln!("Missing value for wire {}", input_1); SynthesisError::Unsatisfiable})?;
+                        let v2 = self.wireValues.get(&input_2).ok_or_else(|| {eprintln!("Missing value for wire {}", input_2); SynthesisError::Unsatisfiable})?;
 
                         let v1_norm = Self::fe_to_biguint_canonical(&v1);
                         let v2_norm = Self::fe_to_biguint_canonical(&v2);
@@ -319,10 +308,10 @@ impl <F:PrimeField> Parser<F>{
                         
                         let out_val = *v1 + *v2 - two * (*v1) * (*v2);
                         if v1_norm != BigUint::from(0u8) && v1_norm != BigUint::from(1u8) {
-                            eprintln!("XOR! Valore non booleano per wire {}", input_1);
+                            eprintln!("Non-boolean value for xor operation, wire {}", input_1);
                         }
                         if v2_norm != BigUint::from(0u8) && v2_norm != BigUint::from(1u8) {
-                            eprintln!("XOR! Valore non booleano per wire {}", input_2);
+                            eprintln!("Non-boolean value for xor operation, wire {}", input_2);
                         }
 
                         self.wireValues.insert(output, out_val);
@@ -334,8 +323,8 @@ impl <F:PrimeField> Parser<F>{
                         let input_2 = input_ids[1];
                         let output = output_ids[0];
 
-                        let v1 = self.wireValues.get(&input_1).ok_or_else(|| {eprintln!("Manca valore per wire {}", input_1); SynthesisError::Unsatisfiable})?;
-                        let v2 = self.wireValues.get(&input_2).ok_or_else(|| {eprintln!("Manca valore per wire {}", input_2); SynthesisError::Unsatisfiable})?;
+                        let v1 = self.wireValues.get(&input_1).ok_or_else(|| {eprintln!("Missing value for wire {}", input_1); SynthesisError::Unsatisfiable})?;
+                        let v2 = self.wireValues.get(&input_2).ok_or_else(|| {eprintln!("Missing value for wire {}", input_2); SynthesisError::Unsatisfiable})?;
 
                         let out_val = *v1 + *v2 - (*v1) * (*v2);
                         self.wireValues.insert(output, out_val);
@@ -356,7 +345,7 @@ impl <F:PrimeField> Parser<F>{
                         let output_1  = output_ids[0];
                         let output_2   = output_ids[1];
 
-                        let v = *self.wireValues.get(&input).ok_or_else(|| {eprintln!("Manca valore per wire {}", input); SynthesisError::Unsatisfiable})?;
+                        let v = *self.wireValues.get(&input).ok_or_else(|| {eprintln!("Missing value for wire {}", input); SynthesisError::Unsatisfiable})?;
 
                         if v == F::zero(){
                             self.wireValues.insert(output_2, F::zero());
@@ -371,7 +360,7 @@ impl <F:PrimeField> Parser<F>{
                     else if op == "split"{
                         let n = output_ids.len();
                         let input = input_ids[0];
-                        let value = self.wireValues.get(&input).ok_or_else(|| {eprintln!("Manca valore per wire {}", input); SynthesisError::Unsatisfiable})?;
+                        let value = self.wireValues.get(&input).ok_or_else(|| {eprintln!("Missing value for wire {}", input); SynthesisError::Unsatisfiable})?;
 
                         let v = Parser::<F>::fe_to_biguint_canonical(&value);
 
@@ -379,9 +368,6 @@ impl <F:PrimeField> Parser<F>{
                             let bit = ((&v>>i) & BigUint::from(1u8)).to_u64().unwrap() as u64;
                             self.wireValues.insert(w, F::from(bit));
 
-                            if input == 465{
-                                eprintln!("bit {} per wire {}: {}", i, w, bit);
-                            }
                         }
 
                         
@@ -395,20 +381,20 @@ impl <F:PrimeField> Parser<F>{
                         let output = output_ids[0];
                         let input_1 = input_ids[0];
                         if self.variables.contains_key(&output) {
-                            eprintln!("PACK: output già definito");
+                            eprintln!("PACK: output already defined");
                             return Err(SynthesisError::Unsatisfiable);
                         }
 
-                        let value_ref = self.wireValues.get(&input_1).ok_or_else(|| {eprintln!("Manca valore per wire {}", input_1); SynthesisError::Unsatisfiable})?;
+                        let value_ref = self.wireValues.get(&input_1).ok_or_else(|| {eprintln!("Missing value for wire {}", input_1); SynthesisError::Unsatisfiable})?;
                         let mut value = *value_ref;
                         
                         let mut two_i: F = F::one();
 
                         for &bit_w in &input_ids[1..] {
-                            let value_bit = *self.wireValues.get(&bit_w).ok_or_else(|| {eprintln!("Manca valore per wire {}", bit_w); SynthesisError::Unsatisfiable})?;
+                            let value_bit = *self.wireValues.get(&bit_w).ok_or_else(|| {eprintln!("Missing value for wire {}", bit_w); SynthesisError::Unsatisfiable})?;
                             let value_norm = Self::fe_to_biguint_canonical(&value_bit);
                             if value_norm != BigUint::from(0u8) && value_norm != BigUint::from(1u8) {
-                                eprintln!("PACK ERRATO! Valore non booleano per wire {}", bit_w);
+                                eprintln!("Non-boolean value in pack operation for wire {}", bit_w);
                             }
                             two_i += two_i;
                             value = value + value_bit * two_i;
@@ -419,12 +405,11 @@ impl <F:PrimeField> Parser<F>{
                     }
 
                     else if let Some(hexstr) = op.strip_prefix("const-mul-neg-"){
-                   
-                        let big = BigUint::parse_bytes(hexstr.trim().as_bytes(),16)
-                        .ok_or_else(|| {eprintln!("Formato HEX errato"); SynthesisError::Unsatisfiable})?;
+                       let big = BigUint::parse_bytes(hexstr.trim().as_bytes(),16)
+                        .ok_or_else(|| {eprintln!("Wrong hex format"); SynthesisError::Unsatisfiable})?;
                         let constant = F::from_be_bytes_mod_order(&big.to_bytes_be());
                         let input = input_ids[0];
-                        let value = self.wireValues.get(&input).ok_or_else(|| {eprintln!("Manca valore per wire {}", input); SynthesisError::Unsatisfiable})?;
+                        let value = self.wireValues.get(&input).ok_or_else(|| {eprintln!("Missing value for wire {}", input); SynthesisError::Unsatisfiable})?;
                         let output = output_ids[0];
                         let final_value = -*value * constant;
                         self.wireValues.insert(output, final_value);
@@ -432,17 +417,17 @@ impl <F:PrimeField> Parser<F>{
 
                     else if let Some(hexstr) = op.strip_prefix("const-mul-"){
                         let big = BigUint::parse_bytes(hexstr.trim().as_bytes(),16)
-                        .ok_or_else(|| {eprintln!("Formato HEX errato"); SynthesisError::Unsatisfiable})?;
+                        .ok_or_else(|| {eprintln!("Wrong hex format"); SynthesisError::Unsatisfiable})?;
                         let constant = F::from_be_bytes_mod_order(&big.to_bytes_be());
                         let input = input_ids[0];
-                        let value = self.wireValues.get(&input).ok_or_else(|| {eprintln!("Manca valore per wire {}", input); SynthesisError::Unsatisfiable})?;
+                        let value = self.wireValues.get(&input).ok_or_else(|| {eprintln!("Missing value for wire {}", input); SynthesisError::Unsatisfiable})?;
                         let output = output_ids[0];
                         let final_value = *value * constant;
                         self.wireValues.insert(output, final_value);
                     }
 
                     else {
-                        eprintln!("Problema a riga {}", i);
+                        eprintln!("Error at line {}, unknown operation {}", i, op);
                     }
 
                     
@@ -465,7 +450,7 @@ impl <F:PrimeField> Parser<F>{
                     
                     } 
                     else {
-                        eprintln!("File non conforme");
+                        eprintln!("Wrong file format");
                         return Err(SynthesisError::Unsatisfiable);
                     }
                 }
@@ -474,13 +459,9 @@ impl <F:PrimeField> Parser<F>{
         }
 
         
-
-        eprintln!("File conforme, parsing completato");
         Ok(())
 
-        
     }
-
 
     pub fn fe_to_biguint_canonical(x: &F) -> BigUint {
         let mut bytes = Vec::new();
@@ -495,7 +476,7 @@ impl <F:PrimeField> Parser<F>{
                                      
         } else {
             if self.flag{
-                let value = self.wireValues.get(&wire).ok_or_else(|| {eprintln!("Manca valore per wire {}", wire); SynthesisError::Unsatisfiable})?;
+                let value = self.wireValues.get(&wire).ok_or_else(|| {eprintln!("Missing value for wire {}", wire); SynthesisError::Unsatisfiable})?;
                 let v = cs.new_witness_variable(|| Ok(*value))?;
                 self.variables.insert(wire, v);
                 self.numNizkInputs += 1;
@@ -542,7 +523,7 @@ impl <F:PrimeField> Parser<F>{
     pub fn handle_addition(&mut self, cs:ConstraintSystemRef<F>, input_ids: Vec<Wire>, output_ids: Vec<Wire>) -> Result<(), SynthesisError> {
         let output = output_ids[0];
         if self.variables.contains_key(&output) {
-            eprintln!("ADD: output già definito");
+            eprintln!("ADD: output already defined");
             return Err(SynthesisError::Unsatisfiable);
         }
 
@@ -575,7 +556,7 @@ impl <F:PrimeField> Parser<F>{
         } else {
 
             if self.flag{
-                let value = self.wireValues.get(&output).ok_or_else(|| {eprintln!("Manca valore per wire {}", output); SynthesisError::Unsatisfiable})?;
+                let value = self.wireValues.get(&output).ok_or_else(|| {eprintln!("Missing value for wire {}", output); SynthesisError::Unsatisfiable})?;
                 let v = cs.new_witness_variable(|| Ok(*value))?;
                 self.numNizkInputs += 1;
                 self.variables.insert(output, v);
@@ -586,12 +567,8 @@ impl <F:PrimeField> Parser<F>{
                 self.numNizkInputs += 1;
                 self.variables.insert(output, v);
                 out_var = v;
-            }
-
-            
+            }  
         }
-
-        
         cs.enforce_constraint(l1, l2, out_var.into())?;
 
         Ok(())
@@ -616,7 +593,7 @@ impl <F:PrimeField> Parser<F>{
         } else {
 
             if self.flag{
-                let value = self.wireValues.get(&output).ok_or_else(|| {eprintln!("Manca valore per wire {}", output); SynthesisError::Unsatisfiable})?;
+                let value = self.wireValues.get(&output).ok_or_else(|| {eprintln!("Missing value for wire {}", output); SynthesisError::Unsatisfiable})?;
                 let v = cs.new_witness_variable(|| Ok(*value))?;
                 self.numNizkInputs += 1;
                 self.variables.insert(output, v);
@@ -655,7 +632,7 @@ impl <F:PrimeField> Parser<F>{
             out_var = v; 
         } else {
             if self.flag{
-                let value = self.wireValues.get(&output).ok_or_else(|| {eprintln!("Manca valore per wire {}", output); SynthesisError::Unsatisfiable})?;
+                let value = self.wireValues.get(&output).ok_or_else(|| {eprintln!("Missing value for wire {}", output); SynthesisError::Unsatisfiable})?;
                 let v = cs.new_witness_variable(|| Ok(*value))?;
                 self.numNizkInputs += 1;
                 self.variables.insert(output, v);
@@ -716,7 +693,7 @@ impl <F:PrimeField> Parser<F>{
         } 
         else {
             if self.flag{
-                let value = self.wireValues.get(&output_1).ok_or_else(|| {eprintln!("Manca valore per wire {}", output_2); SynthesisError::Unsatisfiable})?;
+                let value = self.wireValues.get(&output_1).ok_or_else(|| {eprintln!("Missing value for wire {}", output_1); SynthesisError::Unsatisfiable})?;
                 let v = cs.new_witness_variable(|| Ok(*value))?;
                 self.numNizkInputs += 1;
                 self.variables.insert(output_1, v);
@@ -739,7 +716,7 @@ impl <F:PrimeField> Parser<F>{
         } 
         else {
             if self.flag{
-                let value = self.wireValues.get(&output_2).ok_or_else(|| {eprintln!("Manca valore per wire {}", output_2); SynthesisError::Unsatisfiable})?;
+                let value = self.wireValues.get(&output_2).ok_or_else(|| {eprintln!("Missing value for wire {}", output_2); SynthesisError::Unsatisfiable})?;
                 let v = cs.new_witness_variable(|| Ok(*value))?;
                 self.numNizkInputs += 1;
                 self.variables.insert(output_2, v);
@@ -787,7 +764,7 @@ impl <F:PrimeField> Parser<F>{
             } 
             else {
                 if self.flag{
-                    let value = self.wireValues.get(&bit_w).ok_or_else(|| {eprintln!("Manca valore per wire {}", bit_w); SynthesisError::Unsatisfiable})?;
+                    let value = self.wireValues.get(&bit_w).ok_or_else(|| {eprintln!("Missing value for wire {}", bit_w); SynthesisError::Unsatisfiable})?;
                     let v = cs.new_witness_variable(|| Ok(*value))?;
                     self.numNizkInputs += 1;
                     self.variables.insert(bit_w, v);
@@ -821,7 +798,7 @@ impl <F:PrimeField> Parser<F>{
         let output = output_ids[0];
         let input_1 = input_ids[0];
         if self.variables.contains_key(&output) {
-            eprintln!("PACK: output già definito");
+            eprintln!("Output already defined for pack operation");
             return Err(SynthesisError::Unsatisfiable);
         }
         
@@ -850,7 +827,7 @@ impl <F:PrimeField> Parser<F>{
         let output = output_ids[0];
         let input = input_ids[0];
         if self.variables.contains_key(&output) {
-            eprintln!("output già definito");
+            eprintln!("Output already defined for multiplication operation");
             return Err(SynthesisError::Unsatisfiable);
         }
 
@@ -869,7 +846,7 @@ impl <F:PrimeField> Parser<F>{
         let output = output_ids[0];
         let input = input_ids[0];
         if self.variables.contains_key(&output) {
-            eprintln!("output già definito");
+            eprintln!("Output already defined for multiplication operation");
             return Err(SynthesisError::Unsatisfiable);
             
         }
@@ -890,12 +867,10 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         
         self.parsing()?;
 
-        eprintln!("Parsing completato, inizio a costruire il circuito");
-
         for &w in &self.inputWireIds {
             if !self.variables.contains_key(&w) {
                 if self.flag{
-                let value = self.wireValues.get(&w).ok_or_else(|| {eprintln!("Manca valore per wire"); SynthesisError::Unsatisfiable})?;
+                let value = self.wireValues.get(&w).ok_or_else(|| {eprintln!("Missing value for wire {}", w); SynthesisError::Unsatisfiable})?;
                 let v = cs.new_input_variable(|| Ok(*value))?;
                 self.variables.insert(w, v);
                 self.wireLinearCombinations
@@ -925,7 +900,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         for &w in &self.outputWireIds {
             if !self.variables.contains_key(&w) {
                 if self.flag{
-                let value = self.wireValues.get(&w).ok_or_else(|| {eprintln!("Manca valore per wire"); SynthesisError::Unsatisfiable})?;
+                let value = self.wireValues.get(&w).ok_or_else(|| {eprintln!("Missing value for wire {}", w); SynthesisError::Unsatisfiable})?;
                 let v = cs.new_input_variable(|| Ok(*value))?;
                 self.variables.insert(w, v);
                  self.wireLinearCombinations
@@ -940,15 +915,13 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
             }
         }
 
-        
-
-        eprintln!("flag: {}", self.flag);
+    
 
         for &w in &self.nizkWireIds {
            
             if !self.variables.contains_key(&w) {
                 if self.flag{
-                    let value = self.wireValues.get(&w).ok_or_else(|| {eprintln!("Manca valore per wire"    ); SynthesisError::Unsatisfiable})?;
+                    let value = self.wireValues.get(&w).ok_or_else(|| {eprintln!("Missing value for wire {}", w); SynthesisError::Unsatisfiable})?;
                     let v = cs.new_witness_variable(|| Ok(*value))?;
                     self.numNizkInputs += 1;
                     self.variables.insert(w, v);
@@ -975,15 +948,15 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         
         for (i,line_t) in lines{
 
-            let line = line_t.map_err(|e| { eprintln!("ERRORE LETTURA RIGA"); SynthesisError::Unsatisfiable })?;
+            let line = line_t.map_err(|e| { eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
             let line = line.trim();
 
             if!(line.starts_with("#") || line.starts_with("total ") || line.starts_with("input ") || line.starts_with("nizkinput ") || line.starts_with("output") || line.is_empty()){
 
 
-                let (op, after_op) = line.split_once(" in ").ok_or_else(|| { eprintln!("MANCA *IN* PER OPERAZIONE, linea {}", i); SynthesisError::Unsatisfiable })?; 
-                let (in_blk, after_inputs) = after_op.split_once(" out ").ok_or_else(|| { eprintln!("MANCA *OUT* PER OPERAZIONE, linea {}", i); SynthesisError::Unsatisfiable })?; 
-                    
+                let (op, after_op) = line.split_once(" in ").ok_or_else(|| { eprintln!("Missing *IN* for operation, line {}", i); SynthesisError::Unsatisfiable })?; 
+                let (in_blk, after_inputs) = after_op.split_once(" out ").ok_or_else(|| { eprintln!("Missing *OUT* for operation, line {}", i); SynthesisError::Unsatisfiable })?; 
+
                 let input_str = in_blk
                     .split_once('<')
                     .and_then(|(_, r)| r.split_once('>'))
@@ -1011,8 +984,8 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                     
                 if op == "add"{
                     if output_ids.len() != 1{
-                        
-                        eprintln!("ADD non conforme, linea: {}", i);
+
+                        eprintln!("Wrong ADD format, line: {}", i);
                         return Err(SynthesisError::Unsatisfiable);
                     }
                     
@@ -1020,7 +993,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                 }
                 else if op == "mul"{
                     if output_ids.len() != 1 || input_ids.len() != 2 {
-                        eprintln!("MUL non conforme, linea: {}", i);
+                        eprintln!("Wrong MUL format, line: {}", i);
                         return Err(SynthesisError::Unsatisfiable);
                     }
                     
@@ -1028,7 +1001,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                 }
                 else if op == "xor"{
                     if output_ids.len() != 1 || input_ids.len() != 2 {
-                        eprintln!("XOR non conforme, linea: {}", i);
+                        eprintln!("Wrong XOR format, line: {}", i);
                         return Err(SynthesisError::Unsatisfiable);
                     }
                     
@@ -1037,7 +1010,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                 }
                 else if op == "or"{
                     if output_ids.len() != 1 || input_ids.len() != 2 {
-                        eprintln!("OR non conforme, linea: {}", i);
+                        eprintln!("Wrong OR format, line: {}", i);
                         return Err(SynthesisError::Unsatisfiable);
                     }
                     
@@ -1047,7 +1020,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                 else if op == "assert"{
 
                     if output_ids.len() != 1 || input_ids.len() != 2 {
-                        eprintln!("ASSERT non conforme, linea: {}", i);
+                        eprintln!("Wrong ASSERT format, line: {}", i);
                         return Err(SynthesisError::Unsatisfiable);
                     }
                    
@@ -1058,7 +1031,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                 else if op == "zerop"{
 
                     if output_ids.len() != 2 || input_ids.len() != 1 {
-                        eprintln!("ZEROP non conforme, linea:{}", i);
+                        eprintln!("Wrong ZEROP format, line: {}", i);
                         return Err(SynthesisError::Unsatisfiable);
                     }
 
@@ -1069,7 +1042,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                 else if op == "split"{
 
                     if input_ids.len() != 1 {
-                        eprintln!("SPLIT non conforme, linea: {}", i);
+                        eprintln!("Wrong SPLIT format, line: {}", i);
                         return Err(SynthesisError::Unsatisfiable);
                     }
                    
@@ -1080,7 +1053,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                 else if op == "pack"{
 
                     if output_ids.len() != 1 {
-                        eprintln!("PACK non conforme, linea: {}", i);
+                        eprintln!("Wrong PACK format, line: {}", i);
                         return Err(SynthesisError::Unsatisfiable);
                     }
                     
@@ -1091,12 +1064,12 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                 else if let Some(hexstr) = op.strip_prefix("const-mul-neg-"){
 
                     if output_ids.len() != 1 || input_ids.len() != 1 {
-                        eprintln!("CONST MUL non conforme, linea: {}", i);
+                        eprintln!("Wrong CONST MUL format, line: {}", i);
                         return Err(SynthesisError::Unsatisfiable);
                     }
                     
                     let big = BigUint::parse_bytes(hexstr.trim().as_bytes(),16)
-                        .ok_or_else(|| {eprintln!("Formato HEX errato"); SynthesisError::Unsatisfiable})?;
+                        .ok_or_else(|| {eprintln!("Wrong HEX format"); SynthesisError::Unsatisfiable})?;
                     let mut constant = F::from_be_bytes_mod_order(&big.to_bytes_be());
                     let constant = -constant;
                     let _ = self.handle_mul(cs.clone(),input_ids,output_ids, constant); 
@@ -1105,12 +1078,12 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                 else if let Some(hexstr) = op.strip_prefix("const-mul-"){
 
                     if output_ids.len() != 1 || input_ids.len() != 1 {
-                        eprintln!("CONST MUL non conforme, linea:{}", i);
+                        eprintln!("Wrong CONST MUL format, line: {}", i);
                         return Err(SynthesisError::Unsatisfiable);
                     }
                    
                     let big = BigUint::parse_bytes(hexstr.trim().as_bytes(),16)
-                        .ok_or_else(|| {eprintln!("Formato HEX errato"); SynthesisError::Unsatisfiable})?;
+                        .ok_or_else(|| {eprintln!("Wrong HEX format"); SynthesisError::Unsatisfiable})?;
                     let constant = F::from_be_bytes_mod_order(&big.to_bytes_be());
                     let _ = self.handle_mul(cs.clone(),input_ids,output_ids, constant); 
                     
@@ -1118,7 +1091,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
 
                 }
                 else {
-                    eprintln!("PARSING FALLITO");
+                    eprintln!("Parsing failed");
                     return Err(SynthesisError::Unsatisfiable);
                 }
                 
@@ -1153,6 +1126,12 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         for _ in 0..needed {
             cs.enforce_constraint(lc!(), lc!(), lc!())?;
         }
+
+        eprintln!("Circuit constructed with success");
+        eprintln!("Public input variables: {}", cs.num_instance_variables());
+        eprintln!("Private witness variables: {}", cs.num_witness_variables());
+        eprintln!("Total constraints: {}", cs.num_constraints());
+
         Ok(())
     }
 }
