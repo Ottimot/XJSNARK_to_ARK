@@ -140,7 +140,7 @@ impl <F:PrimeField> Parser<F>{
 
         c.generate_constraints(ics.clone())?;
         let matrix = ics.to_matrices().unwrap();
-        let num_var = ics.num_witness_variables() + ics.num_instance_variables() + 1;
+        let num_var = ics.num_witness_variables() + ics.num_instance_variables();
         let num_cons = ics.num_constraints();
         let num_input = ics.num_instance_variables();
 
@@ -889,7 +889,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         
 
         let n_fake_variables= (self.numInputs+self.numOutputs).next_power_of_two() - (self.numInputs+self.numOutputs);
-        for _n in 1..n_fake_variables {
+        for _n in 0..n_fake_variables {
             cs.new_input_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
         }
 
@@ -923,14 +923,12 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                 if self.flag{
                     let value = self.wireValues.get(&w).ok_or_else(|| {eprintln!("Missing value for wire {}", w); SynthesisError::Unsatisfiable})?;
                     let v = cs.new_witness_variable(|| Ok(*value))?;
-                    self.numNizkInputs += 1;
                     self.variables.insert(w, v);
                     self.wireLinearCombinations
                         .insert(w, LinearCombination::from(v));
                 }
                 else{
                     let v = cs.new_witness_variable(|| Err(SynthesisError::AssignmentMissing))?;
-                    self.numNizkInputs += 1;
                     self.variables.insert(w, v);
                     self.wireLinearCombinations
                         .insert(w, LinearCombination::from(v));
@@ -1104,7 +1102,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         }
 
         let n_fake_variables= (self.numInputs + self.numOutputs + self.numNizkInputs + 1).next_power_of_two() - (self.numInputs + self.numOutputs + 1 + self.numNizkInputs);
-        for _n in 1..n_fake_variables {
+        for _n in 0..n_fake_variables {
             cs.new_witness_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
             
         }
