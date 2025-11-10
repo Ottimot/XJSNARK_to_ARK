@@ -13,7 +13,7 @@ use ark_ff::BigInteger;
 
 use ark_relations::{
     lc,
-    r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable, LinearCombination}, //Aggiunte per replicare parsing 
+    r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable, LinearCombination}, 
 };
 
 
@@ -146,8 +146,8 @@ impl <F:PrimeField> Parser<F>{
 
         
 
-    let (a_aligned, b_aligned, c_aligned) = Self::align_abc(&matrix.a, &matrix.b, &matrix.c);
-    Ok((a_aligned, b_aligned, c_aligned, num_var, num_cons, num_input, formatted_input_assignment, witness_assignment))
+        let (a_aligned, b_aligned, c_aligned) = Self::align_abc(&matrix.a, &matrix.b, &matrix.c);
+        Ok((a_aligned, b_aligned, c_aligned, num_var, num_cons, num_input, formatted_input_assignment, witness_assignment))
     }
 
 
@@ -887,12 +887,16 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
 
     
         
-
+        /*
         let n_fake_variables= (self.numInputs+self.numOutputs).next_power_of_two() - (self.numInputs+self.numOutputs);
-        for _n in 0..n_fake_variables {
+        for _n in 1..n_fake_variables {
             cs.new_input_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
         }
 
+        self.numInputs += n_fake_variables;
+ 
+        */
+       
         
 
         
@@ -914,6 +918,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                 }
             }
         }
+
 
     
 
@@ -1101,13 +1106,17 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
 
         }
 
-        let n_fake_variables= (self.numInputs + self.numOutputs + self.numNizkInputs + 1).next_power_of_two() - (self.numInputs + self.numOutputs + 1 + self.numNizkInputs);
+        eprintln!("Number of NIZK inputs before padding: {}", self.numNizkInputs);
+        eprintln!("Num of variables in cs: {}", cs.num_witness_variables());
+
+        let n_fake_variables= (self.numInputs + self.numOutputs + self.numNizkInputs).next_power_of_two() - (self.numInputs + self.numOutputs + self.numNizkInputs + 1);
         for _n in 0..n_fake_variables {
             cs.new_witness_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
             
         }
         self.numNizkInputs += n_fake_variables;
-
+        eprintln!("numNizKInputs = {}", self.numNizkInputs);
+        eprintln!("num Real NizkInputs = {}", cs.num_witness_variables());
         let num_var = (self.numInputs + self.numOutputs + self.numNizkInputs).next_power_of_two();
         //num_var_log = ark_std::log2(num_var_log) as usize;
 
