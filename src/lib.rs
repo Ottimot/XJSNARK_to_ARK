@@ -64,7 +64,7 @@ impl <F:PrimeField> Parser<F>{
             numNizkInputs: 0, 
             numOutputs: 0,
             flag: flag,
-            fake: Some(F::zero()),
+            fake: Some(F::one()),
         }
     }
 
@@ -112,6 +112,8 @@ impl <F:PrimeField> Parser<F>{
         let mut B_aligned = Vec::with_capacity(merged.len());
         let mut C_aligned = Vec::with_capacity(merged.len());
 
+        eprintln!("Aligned len: {}", merged.len());
+
         for (&(r, c), &(aval, bval, cval)) in merged.iter() {
 
             A_aligned.push((r, c, aval));
@@ -120,6 +122,51 @@ impl <F:PrimeField> Parser<F>{
         }
 
         (A_aligned, B_aligned, C_aligned)
+    }
+
+    pub fn obtain_num_var_to_pad(&self, cs: ConstraintSystemRef<F>) -> usize {
+        //let ics: ConstraintSystemRef<F> = ConstraintSystem::new_ref();
+        //self.clone().generate_constraints(ics.clone()).unwrap();
+        let matrix = cs.to_matrices().unwrap();
+
+        let mut merged: BTreeMap<(usize, usize), (F, F, F)> = BTreeMap::new();
+
+        let a = &matrix.a;
+        let b = &matrix.b;
+        let c = &matrix.c;
+
+        for (r, row) in a.iter().enumerate() {
+            for &(val, col) in row {
+                if !val.is_zero() {
+                    let e = merged.entry((r, col)).or_insert((F::zero(), F::zero(), F::zero()));
+                    e.0 += val;
+                   
+                }
+            }
+        }
+        
+        for (r, row) in b.iter().enumerate() {
+            for &(val, col) in row {
+                if !val.is_zero() {
+                    let e = merged.entry((r, col)).or_insert((F::zero(), F::zero(), F::zero()));
+                    e.1 += val;
+                }
+            }
+        }
+   
+        for (r, row) in c.iter().enumerate() {
+            for &(val, col) in row {
+                if !val.is_zero() {
+                    let e = merged.entry((r, col)).or_insert((F::zero(), F::zero(), F::zero()));
+                    e.2 += val;
+                }
+            }
+        }
+
+        //eprintln!("Count A: {}, Count B: {}, Count C: {}", count_a, count_b, count_c);
+        //assert!(count_a == count_b && count_b == count_c);
+        merged.len()
+
     }
 
 
@@ -140,7 +187,7 @@ impl <F:PrimeField> Parser<F>{
 
         c.generate_constraints(ics.clone())?;
         let matrix = ics.to_matrices().unwrap();
-        let num_var = ics.num_witness_variables() + ics.num_instance_variables();
+        let num_var = ics.num_witness_variables(); // + ics.num_instance_variables(); -> devo inserirlo o no?
         let num_cons = ics.num_constraints();
         let num_input = ics.num_instance_variables();
 
@@ -890,7 +937,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         /*
         let n_fake_variables= (self.numInputs+self.numOutputs).next_power_of_two() - (self.numInputs+self.numOutputs);
         for _n in 1..n_fake_variables {
-            cs.new_input_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
+            cs.new_witness_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
         }
 
         self.numInputs += n_fake_variables;
@@ -1108,24 +1155,48 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
 
         eprintln!("Number of NIZK inputs before padding: {}", self.numNizkInputs);
         eprintln!("Num of variables in cs: {}", cs.num_witness_variables());
+        //eprintln!("MA RIESCI A STAMPARE QUALCOSA?");
+        let mut n_fake_constraints = self.obtain_num_var_to_pad(cs.clone());
+        eprintln!("n_fake_constraints: {}", n_fake_constraints);
+        n_fake_constraints = n_fake_constraints.next_power_of_two() - n_fake_constraints;
 
+        eprintln!("n_fake needed: {:?}", n_fake_constraints);
+
+        let fake_variable_one = cs.new_witness_variable(|| Ok(F::one()))?;
+        self.numNizkInputs += 1;
+
+        for _ in 0..n_fake_constraints{
+            cs.enforce_constraint(lc!() + fake_variable_one, lc!() + fake_variable_one, lc!() + fake_variable_one)?;
+        }
+
+        //eprintln!("Numero di variabili fake da aggiungere: {}", n_fake_variables);
+        //let n_fake_variables = n_fake_variables.next_power_of_two() - (self.numInputs + self.numOutputs + self.numNizkInputs + 1);
+        //let fake_variable: Variable = cs.new_witness_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
         let n_fake_variables= (self.numInputs + self.numOutputs + self.numNizkInputs).next_power_of_two() - (self.numInputs + self.numOutputs + self.numNizkInputs + 1);
-        for _n in 0..n_fake_variables {
+        for n in 0..n_fake_variables{
             cs.new_witness_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
             
         }
         self.numNizkInputs += n_fake_variables;
-        eprintln!("numNizKInputs = {}", self.numNizkInputs);
-        eprintln!("num Real NizkInputs = {}", cs.num_witness_variables());
+
+        let threshold = self.obtain_num_var_to_pad(cs.clone());
+        let mut added_var = 0;
+        if self.numNizkInputs < threshold{
+            added_var = threshold - (self.numNizkInputs + self.numOutputs + self.numInputs + 1);
+            for _ in 0..added_var{
+                cs.new_witness_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
+            }
+        }
+        self.numNizkInputs += added_var;
+        //eprintln!("numNizKInputs = {}", self.numNizkInputs);
+        //eprintln!("num Real NizkInputs = {}", cs.num_witness_variables());
         let num_var = (self.numInputs + self.numOutputs + self.numNizkInputs).next_power_of_two();
         //num_var_log = ark_std::log2(num_var_log) as usize;
-
-
-
         let num_constraints = cs.num_constraints();
         let mut needed = 0;
         if num_constraints < num_var{
             needed = num_var - num_constraints;
+           
         }
         else{
             needed = num_constraints.next_power_of_two() - num_constraints;
