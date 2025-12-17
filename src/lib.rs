@@ -1153,22 +1153,64 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
 
         }
 
+        
         eprintln!("Number of NIZK inputs before padding: {}", self.numNizkInputs);
         eprintln!("Num of variables in cs: {}", cs.num_witness_variables());
         //eprintln!("MA RIESCI A STAMPARE QUALCOSA?");
-        let mut n_fake_constraints = self.obtain_num_var_to_pad(cs.clone());
-        eprintln!("n_fake_constraints: {}", n_fake_constraints);
-        n_fake_constraints = n_fake_constraints.next_power_of_two() - n_fake_constraints;
+        let mut n_fake_position = self.obtain_num_var_to_pad(cs.clone());
+        let n_fake_variables= (self.numInputs + self.numOutputs + self.numNizkInputs).next_power_of_two() - (self.numInputs + self.numOutputs + self.numNizkInputs + 1);
+        let needed = cs.num_constraints().next_power_of_two() - cs.num_constraints();
+        n_fake_position = n_fake_position.next_power_of_two() - n_fake_position;
 
-        eprintln!("n_fake needed: {:?}", n_fake_constraints);
+        eprintln!("n_fake position needed: {:?}", n_fake_position);
+        eprintln!("n_fake variables needed: {:?}", n_fake_variables);
+        eprintln!("n_fake constraints needed: {:?}", needed);
+        
+        let total = needed * n_fake_variables;
+        let mut added_constraints = n_fake_position / total;
+        if added_constraints < 1 {
+            added_constraints = 1;
+        }
 
-        let fake_variable_one = cs.new_witness_variable(|| Ok(F::one()))?;
+        let mut fake_lc_a: LinearCombination<F> = lc!();
+        let mut fake_lc_b: LinearCombination<F> = lc!();
+        let mut fake_lc_c: LinearCombination<F> = lc!();
+
+        let mut to_add = 0;
+
+        if n_fake_position > n_fake_variables{
+            to_add = n_fake_variables;
+        }
+        else{
+            to_add = n_fake_position;
+        }
+        //let mut value_c = F::one();
+        for _ in 0..to_add{
+            let fake_variable_one = cs.new_witness_variable(|| Ok(F::one()))?;
+            self.numNizkInputs += 1;
+            fake_lc_a = fake_lc_a + fake_variable_one;
+            fake_lc_b = fake_lc_b + fake_variable_one;
+            
+            
+
+        }
+        for _ in 0..to_add{
+           fake_lc_c = fake_lc_c + fake_lc_a.clone();
+            
+        }
+        
+        for _ in 0..added_constraints{
+            cs.enforce_constraint(fake_lc_a.clone(), fake_lc_b.clone(), fake_lc_c.clone())?;
+        }
+
+        //let fake_variable_one = cs.new_witness_variable(|| Ok(F::one()))?;
+        /*
         self.numNizkInputs += 1;
 
         for _ in 0..n_fake_constraints{
             cs.enforce_constraint(lc!() + fake_variable_one, lc!() + fake_variable_one, lc!() + fake_variable_one)?;
         }
-
+        */
         //eprintln!("Numero di variabili fake da aggiungere: {}", n_fake_variables);
         //let n_fake_variables = n_fake_variables.next_power_of_two() - (self.numInputs + self.numOutputs + self.numNizkInputs + 1);
         //let fake_variable: Variable = cs.new_witness_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
@@ -1178,7 +1220,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
             
         }
         self.numNizkInputs += n_fake_variables;
-
+        /*
         let threshold = self.obtain_num_var_to_pad(cs.clone());
         let mut added_var = 0;
         if self.numNizkInputs < threshold{
@@ -1190,10 +1232,16 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         self.numNizkInputs += added_var;
         //eprintln!("numNizKInputs = {}", self.numNizkInputs);
         //eprintln!("num Real NizkInputs = {}", cs.num_witness_variables());
-        let num_var = (self.numInputs + self.numOutputs + self.numNizkInputs).next_power_of_two();
+        
         //num_var_log = ark_std::log2(num_var_log) as usize;
+
+        
+        
+        let num_var = (self.numInputs + self.numOutputs + self.numNizkInputs).next_power_of_two();
+
         let num_constraints = cs.num_constraints();
         let mut needed = 0;
+        
         if num_constraints < num_var{
             needed = num_var - num_constraints;
            
@@ -1201,6 +1249,9 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         else{
             needed = num_constraints.next_power_of_two() - num_constraints;
         }
+        */
+        
+        let needed = cs.num_constraints().next_power_of_two() - cs.num_constraints();
         for _ in 0..needed {
             cs.enforce_constraint(lc!(), lc!(), lc!())?;
         }
