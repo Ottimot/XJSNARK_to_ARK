@@ -1167,16 +1167,12 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         eprintln!("n_fake constraints needed: {:?}", needed);
         
         //let total = needed * n_fake_variables;
-        let mut total = n_fake_position - n_fake_variables;
-        let mut added_constraints = 1;
-        while total > 0{
-            total -= n_fake_variables;
-            added_constraints += 1;
-        }
-
-        let mut fake_lc_a: LinearCombination<F> = lc!();
-        let mut fake_lc_b: LinearCombination<F> = lc!();
-        let mut fake_lc_c: LinearCombination<F> = lc!();
+        let added_constraints = if n_fake_variables == 0 {
+            0
+        } else {
+            // ceiling division: (a + b - 1) / b
+            (n_fake_position + n_fake_variables - 1) / n_fake_variables
+        };
 
         let mut to_add = 0;
         
@@ -1188,6 +1184,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         }
 
         eprintln!("to_add = {}", to_add);
+        eprintln!("added_constraints = {}", added_constraints);
+
+        let mut fake_lc_a: LinearCombination<F> = lc!();
+        let mut fake_lc_b: LinearCombination<F> = lc!();
+        let mut fake_lc_c: LinearCombination<F> = lc!();
         //let mut value_c = F::one();
         for _ in 0..to_add{
             let fake_variable_one = cs.new_witness_variable(|| Ok(F::one()))?;
