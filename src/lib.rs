@@ -1190,15 +1190,21 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
 
         let mut fake_lc_a: LinearCombination<F> = lc!();
         let mut fake_lc_b: LinearCombination<F> = lc!();
+        let mut last_fake_lc_a: LinearCombination<F> = lc!();
+        let mut last_fake_lc_b: LinearCombination<F> = lc!();
         
         let mut flag = true;
         //let mut value_c = F::one();
-        for _ in 0..to_add{
+        for i in 0..to_add{
+            if i < last_execution{
+                last_fake_lc_a = last_fake_lc_a + fake_variable_one;
+            }
             let fake_variable_one = cs.new_witness_variable(|| Ok(F::one()))?;
             self.numNizkInputs += 1;
             fake_lc_a = fake_lc_a + fake_variable_one;
             if flag{
                 fake_lc_b = fake_lc_b + fake_variable_one;
+                last_fake_lc_b = last_fake_lc_b + fake_variable_one;
                 flag = false;
             }     
 
@@ -1211,19 +1217,6 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         
         for _ in 1..added_constraints{
             cs.enforce_constraint(fake_lc_a.clone(), fake_lc_b.clone(), fake_lc_c.clone())?;
-        }
-        let mut last_fake_lc_a: LinearCombination<F> = lc!();
-        let mut last_fake_lc_b: LinearCombination<F> = lc!();
-        flag = true;
-        for _ in 0..last_execution{
-            let fake_variable_one = cs.new_witness_variable(|| Ok(F::one()))?;
-            self.numNizkInputs += 1;
-            last_fake_lc_a = last_fake_lc_a + fake_variable_one;
-            if flag{
-                last_fake_lc_b = last_fake_lc_b + fake_variable_one;
-                flag = false;
-            }     
-
         }
 
         let last_fake_lc_c = last_fake_lc_a.clone();
