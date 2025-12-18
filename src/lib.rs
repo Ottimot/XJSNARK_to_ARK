@@ -1196,10 +1196,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         let mut flag = true;
         //let mut value_c = F::one();
         for i in 0..to_add{
+            
+            let fake_variable_one = cs.new_witness_variable(|| Ok(F::one()))?;
             if i < last_execution{
                 last_fake_lc_a = last_fake_lc_a + fake_variable_one;
             }
-            let fake_variable_one = cs.new_witness_variable(|| Ok(F::one()))?;
             self.numNizkInputs += 1;
             fake_lc_a = fake_lc_a + fake_variable_one;
             if flag{
