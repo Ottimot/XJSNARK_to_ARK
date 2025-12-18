@@ -1179,13 +1179,15 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         let mut fake_lc_c: LinearCombination<F> = lc!();
 
         let mut to_add = 0;
-
+        
         if n_fake_position > n_fake_variables{
             to_add = n_fake_variables;
         }
         else{
             to_add = n_fake_position;
         }
+
+        eprintln!("to_add = {}", to_add);
         //let mut value_c = F::one();
         for _ in 0..to_add{
             let fake_variable_one = cs.new_witness_variable(|| Ok(F::one()))?;
@@ -1196,6 +1198,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
             
 
         }
+        eprintln!("COMPUTATE LE FAKE lc_a e lc_b");
         for _ in 0..to_add{
            fake_lc_c = fake_lc_c + fake_lc_a.clone();
             
@@ -1204,6 +1207,8 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         for _ in 0..added_constraints{
             cs.enforce_constraint(fake_lc_a.clone(), fake_lc_b.clone(), fake_lc_c.clone())?;
         }
+
+        eprintln!("AGGIUNTI I VINCOLI FAKE");
 
         //let fake_variable_one = cs.new_witness_variable(|| Ok(F::one()))?;
         /*
