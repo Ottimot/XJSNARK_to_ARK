@@ -1167,7 +1167,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         eprintln!("n_fake constraints needed: {:?}", needed);
         
         let total = needed * n_fake_variables;
-        let mut added_constraints = n_fake_position / total;
+        let mut added_constraints = (n_fake_position / total).ceil();
         if added_constraints < 1 {
             added_constraints = 1;
         }
