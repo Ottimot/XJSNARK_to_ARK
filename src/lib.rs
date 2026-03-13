@@ -22,6 +22,7 @@ type Wire = u64;
 #[allow(non_snake_case)]
 #[derive(Clone)]
 pub struct Parser<F: PrimeField> {
+    pub constraint_system_ref: ConstraintSystemRef<F>,
     pub numWires: usize,
     pub wireUseCounters: HashMap<Wire, usize>,
     pub variables: HashMap<Wire, Variable>,
@@ -37,6 +38,7 @@ pub struct Parser<F: PrimeField> {
     pub numNizkInputs: usize, 
     pub numOutputs: usize,
     pub flag: bool,
+    pub flag_input: bool,
     pub fake: Option<F>,
 }
 
@@ -44,11 +46,22 @@ impl <F:PrimeField> Parser<F>{
     pub fn new(path: String, path_input: String) -> Self {
 
         let mut flag = true;
-        if path_input == ""{
+        let mut flag_input = false;
+     
+        if path_input == "" {
+            flag = false;
+
+        }
+
+        if path_input.contains("pub"){
+            flag_input = true;
             flag = false;
         }
 
         Self {
+
+            constraint_system_ref: ConstraintSystem::new_ref(),
+            //constraint_system: constraint_system,
             numWires: 0,
             wireUseCounters: HashMap::new(),
             variables: HashMap::new(),
@@ -64,8 +77,10 @@ impl <F:PrimeField> Parser<F>{
             numNizkInputs: 0, 
             numOutputs: 0,
             flag: flag,
+            flag_input: flag_input,
             fake: Some(F::one()),
         }
+        
     }
 
 
@@ -77,6 +92,7 @@ impl <F:PrimeField> Parser<F>{
         Vec<(usize, usize, F)>, 
         Vec<(usize, usize, F)>, 
         Vec<(usize, usize, F)>, 
+        usize
     ) {
         let mut merged: BTreeMap<(usize, usize), (F, F, F)> = BTreeMap::new();
 
@@ -121,7 +137,7 @@ impl <F:PrimeField> Parser<F>{
             C_aligned.push((r, c, cval));
         }
 
-        (A_aligned, B_aligned, C_aligned)
+        (A_aligned, B_aligned, C_aligned, merged.len())
     }
 
     pub fn obtain_num_var_to_pad(&self, cs: ConstraintSystemRef<F>) -> usize {
@@ -163,38 +179,63 @@ impl <F:PrimeField> Parser<F>{
             }
         }
 
-        //eprintln!("Count A: {}, Count B: {}, Count C: {}", count_a, count_b, count_c);
+        //eprintln!("Count A: {}, Count B: {}, Count C: {}", count_a, count_b, ccount_c);
         //assert!(count_a == count_b && count_b == count_c);
         merged.len()
 
     }
 
 
-    pub fn transform(&self, c: Parser<F>) -> Result<(Vec<(usize, usize, F)>, Vec<(usize, usize, F)>, Vec<(usize, usize, F)>, usize, usize, usize, Vec<F>, Vec<F>), SynthesisError> {
-        let pcs = ConstraintSystem::new_ref();
-        let ics: ConstraintSystemRef<F> = ConstraintSystem::new_ref();
+    pub fn transform(&self) -> Result<(Vec<(usize, usize, F)>, Vec<(usize, usize, F)>, Vec<(usize, usize, F)>, usize, usize, usize, Vec<F>, Vec<F>, usize), SynthesisError> {
+        //let pcs = ConstraintSystem::new_ref();
+        //let ics: ConstraintSystemRef<F> = ConstraintSystem::new_ref();
+        /*
         pcs.set_mode(SynthesisMode::Prove{
             construct_matrices: true,
         });
-        c.clone().generate_constraints(pcs.clone())?;
-        let (formatted_input_assignment, witness_assignment) = {
-            let pcs = pcs.borrow().unwrap();
-            (
-                pcs.instance_assignment.as_slice().to_vec(),
-                pcs.witness_assignment.as_slice().to_vec(),
-            )
-        };
+         */
+        let constraint_system = self.constraint_system_ref.borrow().unwrap();
+        
+        let (mut formatted_input_assignment, mut witness_assignment) = {
 
-        c.generate_constraints(ics.clone())?;
-        let matrix = ics.to_matrices().unwrap();
-        let num_var = ics.num_witness_variables(); // + ics.num_instance_variables(); -> devo inserirlo o no?
-        let num_cons = ics.num_constraints();
-        let num_input = ics.num_instance_variables();
+                (
+                    vec![F::zero(); self.constraint_system_ref.num_instance_variables()], 
+                    vec![F::zero(); self.constraint_system_ref.num_witness_variables()]
+                )
+            };
+        if self.flag || self.flag_input{
+           
+            (formatted_input_assignment, witness_assignment) = {
+
+            (
+                constraint_system.instance_assignment.as_slice().to_vec(),
+                constraint_system.witness_assignment.as_slice().to_vec()
+            )
+            };
+
+
+
+        }
+
+        //c.generate_constraints(ics.clone())?;
+        
+      
+        let matrix = constraint_system.to_matrices().unwrap();
+        let (a_aligned, b_aligned, c_aligned, merged_len) = Self::align_abc(&matrix.a, &matrix.b, &matrix.c);
+    
+
+
+        
+       
+        let num_var = self.constraint_system_ref.num_witness_variables(); // + ics.num_instance_variables(); -> devo inserirlo o no?
+        let num_cons = self.constraint_system_ref.num_constraints();
+        let num_input = self.constraint_system_ref.num_instance_variables();
 
         
 
-        let (a_aligned, b_aligned, c_aligned) = Self::align_abc(&matrix.a, &matrix.b, &matrix.c);
-        Ok((a_aligned, b_aligned, c_aligned, num_var, num_cons, num_input, formatted_input_assignment, witness_assignment))
+        
+        eprintln!("Siamo qui, spero...");
+        Ok((a_aligned, b_aligned, c_aligned, num_var, num_cons, num_input, formatted_input_assignment, witness_assignment, merged_len))
     }
 
 
@@ -205,7 +246,9 @@ impl <F:PrimeField> Parser<F>{
 
     pub fn parsing(&mut self) -> Result<(), SynthesisError> {
 
-        if self.flag{
+        if self.flag || self.flag_input{
+            eprintln!("flag: {:?}", self.flag);
+            eprintln!("flag_input: {:?}", self.flag_input);
             let reader_input = Self::open_reader(&self.path_input).map_err(|e| {
                 eprintln!("Input file not found");
                 SynthesisError::Unsatisfiable
@@ -216,6 +259,8 @@ impl <F:PrimeField> Parser<F>{
                 let line = line_t.map_err(|e| { eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
                 let line = line.splitn(2, '#').next().unwrap().trim_end();
                 let line = line.trim();
+
+                eprintln!("Processing line {:?}: {:?}", i, line);
 
                 if!(line.starts_with("#") || line.is_empty()){
 
@@ -530,7 +575,8 @@ impl <F:PrimeField> Parser<F>{
                 v
             }
             else{
-                let v = cs.new_witness_variable(|| Err(SynthesisError::AssignmentMissing))?;
+                let value = self.fake.unwrap();
+                let v = cs.new_witness_variable(|| Ok(value))?;
                 self.variables.insert(wire, v);
                 self.numNizkInputs += 1;
                 v
@@ -610,7 +656,8 @@ impl <F:PrimeField> Parser<F>{
                 out_var = v;
             }
             else{
-                let v = cs.new_witness_variable(|| Err(SynthesisError::AssignmentMissing))?;
+                let value = self.fake.unwrap();
+                let v = cs.new_witness_variable(|| Ok(value))?;
                 self.numNizkInputs += 1;
                 self.variables.insert(output, v);
                 out_var = v;
@@ -647,7 +694,8 @@ impl <F:PrimeField> Parser<F>{
                 out_var = v;
             }
             else{
-                let v = cs.new_witness_variable(|| Err(SynthesisError::AssignmentMissing))?;
+                let value = self.fake.unwrap();
+                let v = cs.new_witness_variable(|| Ok(value))?;
                 self.numNizkInputs += 1;
                 self.variables.insert(output, v);
                 out_var = v;
@@ -686,7 +734,8 @@ impl <F:PrimeField> Parser<F>{
                 out_var = v;
             }
             else{
-                let v = cs.new_witness_variable(|| Err(SynthesisError::AssignmentMissing))?;
+                let value = self.fake.unwrap();
+                let v = cs.new_witness_variable(|| Ok(value))?;
                 self.numNizkInputs += 1;
                 self.variables.insert(output, v);
                 out_var = v;
@@ -749,7 +798,8 @@ impl <F:PrimeField> Parser<F>{
 
             }
             else{
-                let v = cs.new_witness_variable(|| Err(SynthesisError::AssignmentMissing))?;
+                let value = self.fake.unwrap();
+                let v = cs.new_witness_variable(|| Ok(value))?;
                 self.variables.insert(output_1, v);
                 self.numNizkInputs += 1;
                 out_aux_var = v;
@@ -772,7 +822,8 @@ impl <F:PrimeField> Parser<F>{
 
             }
             else{
-                let v = cs.new_witness_variable(|| Err(SynthesisError::AssignmentMissing))?;
+                let value = self.fake.unwrap();
+                let v = cs.new_witness_variable(|| Ok(value))?;
                 self.numNizkInputs += 1;
                 self.variables.insert(output_2, v);
                 vprt = v;
@@ -818,7 +869,8 @@ impl <F:PrimeField> Parser<F>{
                     bit_var = v
                 }
                 else{
-                    let v = cs.new_witness_variable(|| Err(SynthesisError::AssignmentMissing))?;
+                    let value = self.fake.unwrap();
+                    let v = cs.new_witness_variable(|| Ok(value))?;
                     self.numNizkInputs += 1;
                     self.variables.insert(bit_w, v);
                     bit_var = v
@@ -910,21 +962,24 @@ impl <F:PrimeField> Parser<F>{
 
 impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
 
-    fn generate_constraints(mut self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
-        
+    fn generate_constraints(mut self, _cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
+
         self.parsing()?;
 
         for &w in &self.inputWireIds {
             if !self.variables.contains_key(&w) {
-                if self.flag{
+                if self.flag || self.flag_input{
                 let value = self.wireValues.get(&w).ok_or_else(|| {eprintln!("Missing value for wire {}", w); SynthesisError::Unsatisfiable})?;
-                let v = cs.new_input_variable(|| Ok(*value))?;
+                let v = self.constraint_system_ref.new_input_variable(|| Ok(*value))?;
                 self.variables.insert(w, v);
                 self.wireLinearCombinations
                     .insert(w, LinearCombination::from(v));
                 }
+                
                 else{
-                let v = cs.new_input_variable(|| Err(SynthesisError::AssignmentMissing))?;
+                    
+                let value = self.fake.unwrap();
+                let v = self.constraint_system_ref.new_input_variable(|| Ok(value))?;
                 self.variables.insert(w, v);
                 self.wireLinearCombinations
                     .insert(w, LinearCombination::from(v));
@@ -950,15 +1005,16 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
 
         for &w in &self.outputWireIds {
             if !self.variables.contains_key(&w) {
-                if self.flag{
+                if self.flag || self.flag_input{
                 let value = self.wireValues.get(&w).ok_or_else(|| {eprintln!("Missing value for wire {}", w); SynthesisError::Unsatisfiable})?;
-                let v = cs.new_input_variable(|| Ok(*value))?;
+                let v = self.constraint_system_ref.new_input_variable(|| Ok(*value))?;
                 self.variables.insert(w, v);
                  self.wireLinearCombinations
                     .insert(w, LinearCombination::from(v));
                 }
                 else{
-                let v = cs.new_input_variable(|| Err(SynthesisError::AssignmentMissing))?;
+                let value = self.fake.unwrap();
+                let v = self.constraint_system_ref.new_input_variable(|| Ok(value))?;
                 self.variables.insert(w, v);
                 self.wireLinearCombinations
                     .insert(w, LinearCombination::from(v));
@@ -974,13 +1030,14 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
             if !self.variables.contains_key(&w) {
                 if self.flag{
                     let value = self.wireValues.get(&w).ok_or_else(|| {eprintln!("Missing value for wire {}", w); SynthesisError::Unsatisfiable})?;
-                    let v = cs.new_witness_variable(|| Ok(*value))?;
+                    let v = self.constraint_system_ref.new_witness_variable(|| Ok(*value))?;
                     self.variables.insert(w, v);
                     self.wireLinearCombinations
                         .insert(w, LinearCombination::from(v));
                 }
                 else{
-                    let v = cs.new_witness_variable(|| Err(SynthesisError::AssignmentMissing))?;
+                    let value = self.fake.unwrap();
+                    let v = self.constraint_system_ref.new_witness_variable(|| Ok(value))?;
                     self.variables.insert(w, v);
                     self.wireLinearCombinations
                         .insert(w, LinearCombination::from(v));
@@ -989,7 +1046,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         }
 
 
-        let reader = Self::open_reader(&self.path).map_err(|e| {
+        let reader = Self::open_reader(&self.path).map_err(|_e| {
             eprintln!("FILE INESISTENTE");
             SynthesisError::Unsatisfiable
         })?;
@@ -998,7 +1055,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         
         for (i,line_t) in lines{
 
-            let line = line_t.map_err(|e| { eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
+            let line = line_t.map_err(|_e| { eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
             let line = line.trim();
 
             if!(line.starts_with("#") || line.starts_with("total ") || line.starts_with("input ") || line.starts_with("nizkinput ") || line.starts_with("output") || line.is_empty()){
@@ -1039,7 +1096,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                         return Err(SynthesisError::Unsatisfiable);
                     }
                     
-                    let _ = self.handle_addition(cs.clone(),input_ids, output_ids);
+                    let _ = self.handle_addition(self.constraint_system_ref.clone(),input_ids, output_ids);
                 }
                 else if op == "mul"{
                     if output_ids.len() != 1 || input_ids.len() != 2 {
@@ -1047,7 +1104,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                         return Err(SynthesisError::Unsatisfiable);
                     }
                     
-                    let _ = self.add_mul_constraint(cs.clone(),input_ids,output_ids);
+                    let _ = self.add_mul_constraint(self.constraint_system_ref.clone(),input_ids,output_ids);
                 }
                 else if op == "xor"{
                     if output_ids.len() != 1 || input_ids.len() != 2 {
@@ -1055,7 +1112,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                         return Err(SynthesisError::Unsatisfiable);
                     }
                     
-                    let _ = self.add_xor_constraint(cs.clone(),input_ids,output_ids);
+                    let _ = self.add_xor_constraint(self.constraint_system_ref.clone(),input_ids,output_ids);
 
                 }
                 else if op == "or"{
@@ -1064,7 +1121,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                         return Err(SynthesisError::Unsatisfiable);
                     }
                     
-                    let _ = self.add_or_constraint(cs.clone(),input_ids,output_ids);
+                    let _ = self.add_or_constraint(self.constraint_system_ref.clone(),input_ids,output_ids);
 
                 }
                 else if op == "assert"{
@@ -1074,7 +1131,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                         return Err(SynthesisError::Unsatisfiable);
                     }
                    
-                    let _ = self.add_assert_constraint(cs.clone(),input_ids,output_ids);
+                    let _ = self.add_assert_constraint(self.constraint_system_ref.clone(),input_ids,output_ids);
 
                 }
                 
@@ -1085,7 +1142,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                         return Err(SynthesisError::Unsatisfiable);
                     }
 
-                    let _ = self.add_zerop_constraint(cs.clone(),input_ids,output_ids);
+                    let _ = self.add_zerop_constraint(self.constraint_system_ref.clone(),input_ids,output_ids);
                     
 
                 }
@@ -1096,7 +1153,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                         return Err(SynthesisError::Unsatisfiable);
                     }
                    
-                    let _ = self.add_split_constraint(cs.clone(),input_ids,output_ids);
+                    let _ = self.add_split_constraint(self.constraint_system_ref.clone(),input_ids,output_ids);
 
 
                 }
@@ -1107,7 +1164,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                         return Err(SynthesisError::Unsatisfiable);
                     }
                     
-                    let _ = self.handle_pack(cs.clone(),input_ids,output_ids);
+                    let _ = self.handle_pack(self.constraint_system_ref.clone(),input_ids,output_ids);
 
                 }
                 
@@ -1120,9 +1177,9 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                     
                     let big = BigUint::parse_bytes(hexstr.trim().as_bytes(),16)
                         .ok_or_else(|| {eprintln!("Wrong HEX format"); SynthesisError::Unsatisfiable})?;
-                    let mut constant = F::from_be_bytes_mod_order(&big.to_bytes_be());
+                    let constant = F::from_be_bytes_mod_order(&big.to_bytes_be());
                     let constant = -constant;
-                    let _ = self.handle_mul(cs.clone(),input_ids,output_ids, constant); 
+                    let _ = self.handle_mul(self.constraint_system_ref.clone(),input_ids,output_ids, constant); 
 
                 }
                 else if let Some(hexstr) = op.strip_prefix("const-mul-"){
@@ -1135,8 +1192,8 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
                     let big = BigUint::parse_bytes(hexstr.trim().as_bytes(),16)
                         .ok_or_else(|| {eprintln!("Wrong HEX format"); SynthesisError::Unsatisfiable})?;
                     let constant = F::from_be_bytes_mod_order(&big.to_bytes_be());
-                    let _ = self.handle_mul(cs.clone(),input_ids,output_ids, constant); 
-                    
+                    let _ = self.handle_mul(self.constraint_system_ref.clone(),input_ids,output_ids, constant); 
+
 
 
                 }
@@ -1155,11 +1212,12 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
 
         
         eprintln!("Number of NIZK inputs before padding: {}", self.numNizkInputs);
-        eprintln!("Num of variables in cs: {}", cs.num_witness_variables());
+        eprintln!("Num of variables in cs: {}", self.constraint_system_ref.num_witness_variables());
         //eprintln!("MA RIESCI A STAMPARE QUALCOSA?");
-        let mut n_fake_position = self.obtain_num_var_to_pad(cs.clone());
+        let mut n_fake_position = self.obtain_num_var_to_pad(self.constraint_system_ref.clone());
+        eprintln!("n_fake_position: {:?}", n_fake_position);
         let n_fake_variables= (self.numInputs + self.numOutputs + self.numNizkInputs).next_power_of_two() - (self.numInputs + self.numOutputs + self.numNizkInputs + 1);
-        let needed = cs.num_constraints().next_power_of_two() - cs.num_constraints();
+        let needed = self.constraint_system_ref.num_constraints().next_power_of_two() - self.constraint_system_ref.num_constraints();
         n_fake_position = n_fake_position.next_power_of_two() - n_fake_position;
 
         eprintln!("n_fake position needed: {:?}", n_fake_position);
@@ -1180,6 +1238,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         if n_fake_position > n_fake_variables{
             to_add = n_fake_variables;
             last_execution = n_fake_position - (added_constraints -1)* n_fake_variables;
+            eprintln!("")
         }
         else{
             to_add = n_fake_position;
@@ -1197,7 +1256,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         //let mut value_c = F::one();
         for i in 0..to_add{
             
-            let fake_variable_one = cs.new_witness_variable(|| Ok(F::one()))?;
+            let fake_variable_one = self.constraint_system_ref.new_witness_variable(|| Ok(F::one()))?;
             if i < last_execution{
                 last_fake_lc_a = last_fake_lc_a + fake_variable_one;
             }
@@ -1217,11 +1276,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         
         
         for _ in 1..added_constraints{
-            cs.enforce_constraint(fake_lc_a.clone(), fake_lc_b.clone(), fake_lc_c.clone())?;
+            self.constraint_system_ref.enforce_constraint(fake_lc_a.clone(), fake_lc_b.clone(), fake_lc_c.clone())?;
         }
 
         let last_fake_lc_c = last_fake_lc_a.clone();
-        cs.enforce_constraint(last_fake_lc_a.clone(), last_fake_lc_b.clone(), last_fake_lc_c.clone())?;
+        self.constraint_system_ref.enforce_constraint(last_fake_lc_a.clone(), last_fake_lc_b.clone(), last_fake_lc_c.clone())?;
 
         eprintln!("AGGIUNTI I VINCOLI FAKE");
 
@@ -1237,9 +1296,9 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         //let n_fake_variables = n_fake_variables.next_power_of_two() - (self.numInputs + self.numOutputs + self.numNizkInputs + 1);
         //let fake_variable: Variable = cs.new_witness_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
         let n_fake_variables= (self.numInputs + self.numOutputs + self.numNizkInputs).next_power_of_two() - (self.numInputs + self.numOutputs + self.numNizkInputs + 1);
-        for n in 0..n_fake_variables{
-            cs.new_witness_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
-            
+        for _ in 0..n_fake_variables{
+            self.constraint_system_ref.new_witness_variable(|| self.fake.ok_or(SynthesisError::AssignmentMissing))?;
+
         }
         self.numNizkInputs += n_fake_variables;
         /*
@@ -1273,15 +1332,15 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         }
         */
         
-        let needed = cs.num_constraints().next_power_of_two() - cs.num_constraints();
+        let needed = self.constraint_system_ref.num_constraints().next_power_of_two() - self.constraint_system_ref.num_constraints();
         for _ in 0..needed {
-            cs.enforce_constraint(lc!(), lc!(), lc!())?;
+            self.constraint_system_ref.enforce_constraint(lc!(), lc!(), lc!())?;
         }
 
         eprintln!("Circuit constructed with success");
-        eprintln!("Public input variables: {}", cs.num_instance_variables());
-        eprintln!("Private witness variables: {}", cs.num_witness_variables());
-        eprintln!("Total constraints: {}", cs.num_constraints());
+        eprintln!("Public input variables: {}", self.constraint_system_ref.num_instance_variables());
+        eprintln!("Private witness variables: {}", self.constraint_system_ref.num_witness_variables());
+        eprintln!("Total constraints: {}", self.constraint_system_ref.num_constraints());
 
         Ok(())
     }
