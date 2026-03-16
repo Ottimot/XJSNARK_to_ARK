@@ -233,8 +233,6 @@ impl <F:PrimeField> Parser<F>{
 
         
 
-        
-        eprintln!("Siamo qui, spero...");
         Ok((a_aligned, b_aligned, c_aligned, num_var, num_cons, num_input, formatted_input_assignment, witness_assignment, merged_len))
     }
 
@@ -256,24 +254,23 @@ impl <F:PrimeField> Parser<F>{
             let mut lines_input = reader_input.lines().enumerate();
             for (i,line_t) in lines_input.by_ref(){
 
-                let line = line_t.map_err(|e| { eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
+                let line = line_t.map_err(|e| { eprintln!("Error reading line {}: {:?}", i, e); SynthesisError::Unsatisfiable })?;
                 let line = line.splitn(2, '#').next().unwrap().trim_end();
                 let line = line.trim();
 
-                eprintln!("Processing line {:?}: {:?}", i, line);
 
                 if!(line.starts_with("#") || line.is_empty()){
 
                     let mut line = line.split_whitespace();
-                    let wire_str = line.next().ok_or_else(|| {eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
+                    let wire_str = line.next().ok_or_else(|| {eprintln!("Error reading line {}: missing wire ID", i); SynthesisError::Unsatisfiable })?;
                     let wire_id: Wire = wire_str
                     .parse()
-                    .map_err(|_| ark_relations::r1cs::SynthesisError::Unsatisfiable)?;
+                    .map_err(|e| {eprintln!("Error parsing wire ID at line {}: {:?}", i, e); ark_relations::r1cs::SynthesisError::Unsatisfiable})?;
 
-                    let value_str = line.next().ok_or_else(|| {eprintln!("Error reading line {}", i); SynthesisError::Unsatisfiable })?;
+                    let value_str = line.next().ok_or_else(|| {eprintln!("Error reading line {}: missing value", i); SynthesisError::Unsatisfiable })?;
 
                     let value = BigUint::parse_bytes(value_str.trim().as_bytes(),16)
-                        .ok_or_else(|| {eprintln!("Invalid HEX format"); SynthesisError::Unsatisfiable})?;
+                        .ok_or_else(|| {eprintln!("Invalid HEX format at line {}: value='{}' could not be parsed as hex", i, value_str); SynthesisError::Unsatisfiable})?;
 
                     let field_value = F::from_be_bytes_mod_order(&value.to_bytes_be());
                     self.wireValues.insert(wire_id, field_value);
@@ -1238,10 +1235,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         if n_fake_position > n_fake_variables{
             to_add = n_fake_variables;
             last_execution = n_fake_position - (added_constraints -1)* n_fake_variables;
-            eprintln!("")
+            
         }
         else{
             to_add = n_fake_position;
+            last_execution = n_fake_position;
         }
 
         eprintln!("to_add = {}", to_add);
@@ -1277,6 +1275,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for Parser<F> {
         
         for _ in 1..added_constraints{
             self.constraint_system_ref.enforce_constraint(fake_lc_a.clone(), fake_lc_b.clone(), fake_lc_c.clone())?;
+            eprintln!("AGGIUNGO I VARI ADDED CONSTR");
         }
 
         let last_fake_lc_c = last_fake_lc_a.clone();
