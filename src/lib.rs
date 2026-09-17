@@ -558,49 +558,29 @@ impl <F:PrimeField> Parser<F>{
         BigUint::from_bytes_le(&bytes)
     }
 
-    pub fn find(&mut self, wire: Wire, cs: ConstraintSystemRef<F>) -> Result<LinearCombination<F>, SynthesisError> {
-
-        let out_var: Variable = if let Some(&v) = self.variables.get(&wire) {
-            v 
-                                     
+    pub fn find(&mut self, wire: Wire, _cs: ConstraintSystemRef<F>) -> Result<LinearCombination<F>, SynthesisError> {
+        // Linear-operation outputs already have an expression; they need no
+        // independent witness variable. See notes/find-allocation.md.
+        let lc = if let Some(existing) = self.wireLinearCombinations.get(&wire) {
+            existing.clone()
         } else {
-            if self.flag{
-                let value = self.wireValues.get(&wire).ok_or_else(|| {eprintln!("Missing value for wire {}", wire); SynthesisError::Unsatisfiable})?;
-                let v = cs.new_witness_variable(|| Ok(*value))?;
-                self.variables.insert(wire, v);
-                self.numNizkInputs += 1;
-                v
-            }
-            else{
-                let value = self.fake.unwrap();
-                let v = cs.new_witness_variable(|| Ok(value))?;
-                self.variables.insert(wire, v);
-                self.numNizkInputs += 1;
-                v
-            }
-           
+            let v = self.variables.get(&wire).copied().ok_or_else(|| {
+                eprintln!("Wire {} has neither a variable nor a linear combination", wire);
+                SynthesisError::Unsatisfiable
+            })?;
+            let lc = LinearCombination::from(v);
+            self.wireLinearCombinations.insert(wire, lc.clone());
+            lc
         };
 
-        if let Some(c) = self.wireUseCounters.get_mut(&wire) { 
-
+        if let Some(c) = self.wireUseCounters.get_mut(&wire) {
             *c -= 1;
-            if *c == 0
-            {
+            if *c == 0 {
                 self.toClean.push(wire);
             }
         }
 
-
-        let lc: LinearCombination<F> = if let Some(existing) = self.wireLinearCombinations.get(&wire) {
-            existing.clone()
-        } else {
-            let new_lc: LinearCombination<F> = out_var.into(); 
-            self.wireLinearCombinations.insert(wire, new_lc.clone());
-            new_lc
-        };
-        
-
-        Ok(self.wireLinearCombinations[&wire].clone())
+        Ok(lc)
     }
 
     pub fn clean(&mut self) {
